@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minigame Lắp Ghép Tàu Vũ Trụ</title>
+    <!-- Tích hợp Tailwind CSS cho giao diện -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tích hợp thư viện Pháo giấy (Confetti) -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: radial-gradient(circle at center, #1e1b4b, #000000);
+            color: white;
+            overflow-x: hidden;
+        }
+
+        /* Bầu trời sao lấp lánh */
+        .stars {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            background-image: 
+                radial-gradient(2px 2px at 20px 30px, #eee, rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 40px 70px, #fff, rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 50px 160px, #ddd, rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 90px 40px, #fff, rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 130px 80px, #fff, rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 160px 120px, #ddd, rgba(0,0,0,0));
+            background-repeat: repeat;
+            background-size: 200px 200px;
+            animation: twinkle 4s infinite linear;
+            opacity: 0.5;
+            z-index: -1;
+        }
+        @keyframes twinkle {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-200px); }
+        }
+
+        /* Định hình các khối mảnh ghép bằng Clip-Path */
+        .piece {
+            cursor: grab;
+            filter: drop-shadow(0 8px 6px rgba(0,0,0,0.5));
+            transition: transform 0.1s;
+            position: relative;
+            z-index: 10;
+        }
+        .piece:active {
+            cursor: grabbing;
+            transform: scale(1.1);
+        }
+        
+        /* 1. Mũi tàu (Tam giác đỏ) */
+        .shape-nose {
+            width: 80px; height: 80px;
+            background: linear-gradient(135deg, #ef4444, #b91c1c);
+            clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+        }
+        /* 2. Thân tàu (Chữ nhật xanh dương) */
+        .shape-body {
+            width: 80px; height: 120px;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            border-radius: 8px 8px 0 0;
+            display: flex; justify-content: center; align-items: center;
+        }
+        /* Cửa sổ thân tàu */
+        .shape-body::after {
+            content: '';
+            width: 30px; height: 30px;
+            background: #93c5fd;
+            border-radius: 50%;
+            border: 4px solid #1e3a8a;
+        }
+        /* 3 & 4. Cánh tàu (Tam giác xanh lá) */
+        .shape-wing-l {
+            width: 60px; height: 80px;
+            background: linear-gradient(135deg, #10b981, #047857);
+            clip-path: polygon(100% 0, 0 100%, 100% 100%);
+        }
+        .shape-wing-r {
+            width: 60px; height: 80px;
+            background: linear-gradient(135deg, #10b981, #047857);
+            clip-path: polygon(0 0, 0 100%, 100% 100%);
+        }
+        /* 5 & 6. Động cơ phản lực (Hình thang vàng) */
+        .shape-engine {
+            width: 30px; height: 40px;
+            background: linear-gradient(135deg, #f59e0b, #b45309);
+            clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%);
+        }
+
+        /* Khu vực Bản Vẽ (Blueprint) */
+        .blueprint-board {
+            position: relative;
+            width: 200px;
+            height: 260px;
+        }
+        .drop-zone {
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.1);
+            border: 2px dashed #60a5fa;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .drop-zone.hovered {
+            background-color: rgba(96, 165, 250, 0.4);
+            border-color: #fbbf24;
+            box-shadow: 0 0 15px #fbbf24;
+        }
+        
+        /* Tọa độ các vùng thả */
+        .zone-nose { top: 0; left: 60px; width: 80px; height: 80px; clip-path: polygon(50% 0%, 0% 100%, 100% 100%); }
+        .zone-body { top: 80px; left: 60px; width: 80px; height: 120px; border-radius: 8px 8px 0 0; }
+        .zone-wing-l { top: 120px; left: 0px; width: 60px; height: 80px; clip-path: polygon(100% 0, 0 100%, 100% 100%); }
+        .zone-wing-r { top: 120px; left: 140px; width: 60px; height: 80px; clip-path: polygon(0 0, 0 100%, 100% 100%); }
+        .zone-engine-1 { top: 200px; left: 65px; width: 30px; height: 40px; clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%); }
+        .zone-engine-2 { top: 200px; left: 105px; width: 30px; height: 40px; clip-path: polygon(20% 0%, 80% 0%, 100% 100%, 0% 100%); }
+
+        /* Animation khi tàu bay lên (Chiến thắng) */
+        .fly-away {
+            animation: blastOff 2s ease-in forwards;
+        }
+        @keyframes blastOff {
+            0% { transform: translateY(0); }
+            20% { transform: translateY(20px); } /* Nhún lấy đà */
+            100% { transform: translateY(-800px); } /* Bay vút */
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-8 select-none relative">
+    <div class="stars"></div>
+
+    <!-- Header Cá Nhân Hóa: Trạm Chỉ Huy -->
+    <div class="flex items-center gap-5 bg-slate-800/80 backdrop-blur-md px-8 py-4 rounded-3xl shadow-[0_0_20px_rgba(59,130,246,0.5)] border border-blue-500/30 mb-6 w-[90%] max-w-3xl z-10">
+        <img src="https://scontent.fvca5-1.fna.fbcdn.net/v/t39.30808-6/459706934_3695466507341042_8842995293196730103_n.jpg?stp=dst-jpg_tt6&cstp=mx548x548&ctp=s548x548&_nc_cat=110&_nc_map=urlgen_bucketless&ccb=1-7&_nc_sid=6ee11a&_nc_ohc=QTnyHWkst8UQ7kNvwH533RB&_nc_oc=AdphKRPdHQtkyZkHWpSD6r_r6z6zt2AX-m9bwQFZGjFjWYDnIFosg2AHNuQ_flgaRmI&_nc_zt=23&_nc_ht=scontent.fvca5-1.fna&_nc_gid=kPFluVH02hjcE1bfi5brIA&_nc_ss=7b2a8&oh=00_AQQpYQRLmP8RZSFj0wKAVAq72BCqoHn3oFcB2wF4gGXsaA&oe=6AECDC74" 
+             alt="Huỳnh Ngọc Hoàng" 
+             class="w-24 h-24 rounded-full border-4 border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.6)] object-cover">
+        <div>
+            <h1 class="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-orange-500 uppercase tracking-widest drop-shadow-md">
+                Chế Tạo Tàu Vũ Trụ
+            </h1>
+            <p class="text-blue-200 font-bold mt-2 text-lg">🚀 Trạm Trưởng: Thầy Huỳnh Ngọc Hoàng</p>
+        </div>
+    </div>
+
+    <!-- Bảng Điều Khiển (Timer & Nút) -->
+    <div class="flex items-center justify-center gap-6 mb-8 w-full z-10">
+        <div id="timer-display" class="text-2xl font-bold text-white bg-slate-800/80 backdrop-blur-md px-6 py-3 rounded-2xl shadow-lg border-2 border-blue-400 w-48 text-center flex items-center justify-center gap-2">
+            ⏱ <span id="time-val">00:00</span>
+        </div>
+        <button id="restart-btn" onclick="resetGame()" class="hidden bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-400 hover:to-purple-500 text-white font-black py-3 px-8 rounded-2xl shadow-[0_0_15px_rgba(236,72,153,0.6)] transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2 border-2 border-pink-300">
+            ↺ CHƠI LẠI
+        </button>
+    </div>
+
+    <!-- Khu Vực Trò Chơi -->
+    <div class="flex flex-col md:flex-row gap-12 items-center justify-center w-full max-w-5xl px-4 z-10">
+        
+        <!-- Kho Mảnh Ghép -->
+        <div class="flex flex-col p-6 bg-slate-800/60 backdrop-blur-md rounded-3xl border-2 border-indigo-500/50 shadow-2xl w-full md:w-1/2 min-h-[300px]">
+            <h2 class="text-center font-black text-indigo-300 uppercase tracking-widest mb-6">Kho Mảnh Ghép</h2>
+            <div class="flex flex-wrap justify-center gap-6 items-end" id="pieces-wrapper">
+                <!-- 6 Mảnh Ghép -->
+                <div class="piece shape-nose" draggable="true" id="p-nose" data-type="nose"></div>
+                <div class="piece shape-body" draggable="true" id="p-body" data-type="body"></div>
+                <div class="piece shape-wing-l" draggable="true" id="p-wl" data-type="wing-l"></div>
+                <div class="piece shape-wing-r" draggable="true" id="p-wr" data-type="wing-r"></div>
+                <div class="piece shape-engine" draggable="true" id="p-e1" data-type="engine"></div>
+                <div class="piece shape-engine" draggable="true" id="p-e2" data-type="engine"></div>
+            </div>
+        </div>
+
+        <!-- Bản Vẽ Nháp (Silhouette) -->
+        <div class="flex flex-col items-center p-8 bg-slate-800/60 backdrop-blur-md rounded-3xl border-2 border-indigo-500/50 shadow-2xl w-full md:w-1/2">
+            <h2 class="text-center font-black text-yellow-400 uppercase tracking-widest mb-6">Bản Vẽ Lắp Ráp</h2>
+            
+            <div class="blueprint-board" id="game-board">
+                <div class="drop-zone zone-nose" id="drop-nose" data-accept="nose"></div>
+                <div class="drop-zone zone-wing-l" id="drop-wl" data-accept="wing-l"></div>
+                <div class="drop-zone zone-body" id="drop-body" data-accept="body"></div>
+                <div class="drop-zone zone-wing-r" id="drop-wr" data-accept="wing-r"></div>
+                <div class="drop-zone zone-engine-1" id="drop-e1" data-accept="engine"></div>
+                <div class="drop-zone zone-engine-2" id="drop-e2" data-accept="engine"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Thông báo chiến thắng -->
+    <div id="win-message" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+        <div class="bg-gradient-to-b from-blue-600 to-indigo-900 p-10 rounded-3xl text-center border-4 border-yellow-400 shadow-[0_0_50px_rgba(250,204,21,0.5)] transform scale-0 transition-transform duration-500" id="win-modal">
+            <h2 class="text-5xl font-black text-yellow-300 mb-4 drop-shadow-lg">XUẤT SẮC! 🚀</h2>
+            <p class="text-2xl text-white font-bold mb-6">Em đã chế tạo thành công Tàu Vũ Trụ!</p>
+            <p class="text-xl text-blue-200 mb-8">Thời gian hoàn thành: <strong class="text-yellow-400 text-3xl ml-2" id="final-time">00:00</strong></p>
+            <button onclick="closeWinModalAndRestart()" class="bg-yellow-400 hover:bg-yellow-300 text-blue-900 font-black py-4 px-10 rounded-full text-xl shadow-lg transform hover:scale-105 transition-all">
+                CHƠI LẠI NGAY
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. HỆ THỐNG ÂM THANH TỔNG HỢP ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            if(audioCtx.state === 'suspended') audioCtx.resume();
+            
+            if (type === 'pop') {
+                // Âm thanh khi nhấc mảnh ghép lên
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'chime') {
+                // Âm thanh Ting khi ráp đúng
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(1200, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(1800, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+            } else if (type === 'win') {
+                // Giai điệu chiến thắng (Arpeggio)
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // Đô - Mi - Son - Đố
+                notes.forEach((freq, i) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0, audioCtx.currentTime + i * 0.1);
+                    gain.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + i * 0.1 + 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + i * 0.1 + 0.5);
+                    osc.start(audioCtx.currentTime + i * 0.1);
+                    osc.stop(audioCtx.currentTime + i * 0.1 + 0.5);
+                });
+            }
+        }
+
+        // --- 2. LOGIC ĐẾM THỜI GIAN ---
+        let startTime, timerInterval;
+        let isGameStarted = false;
+        let piecesPlaced = 0;
+        const TOTAL_PIECES = 6; // Tổng số 6 mảnh ghép
+
+        function startTimer() {
+            if (isGameStarted) return;
+            isGameStarted = true;
+            document.getElementById('restart-btn').classList.remove('hidden');
+            startTime = Date.now();
+            timerInterval = setInterval(() => {
+                const elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+                const minutes = String(Math.floor(elapsedTime / 60)).padStart(2, '0');
+                const seconds = String(elapsedTime % 60).padStart(2, '0');
+                document.getElementById('time-val').textContent = `${minutes}:${seconds}`;
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+        }
+
+        // --- 3. LOGIC KÉO THẢ (DRAG & DROP) ---
+        const draggables = document.querySelectorAll('.piece');
+        const dropZones = document.querySelectorAll('.drop-zone');
+
+        draggables.forEach(draggable => {
+            draggable.addEventListener('dragstart', (e) => {
+                startTimer();
+                playSound('pop');
+                e.dataTransfer.setData('text/plain', e.target.id);
+                e.dataTransfer.setData('shape-type', e.target.dataset.type);
+                setTimeout(() => e.target.classList.add('opacity-30'), 0);
+            });
+            draggable.addEventListener('dragend', (e) => {
+                e.target.classList.remove('opacity-30');
+            });
+        });
+
+        dropZones.forEach(zone => {
+            zone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                zone.classList.add('hovered');
+            });
+            zone.addEventListener('dragleave', () => {
+                zone.classList.remove('hovered');
+            });
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('hovered');
+                
+                const shapeType = e.dataTransfer.getData('shape-type');
+                const draggedId = e.dataTransfer.getData('text/plain');
+                
+                // Kiểm tra loại mảnh ghép khớp với khung (Lưu ý: 2 động cơ dùng chung data-type="engine")
+                if (shapeType === zone.dataset.accept && !zone.hasChildNodes()) {
+                    const draggedElement = document.getElementById(draggedId);
+                    playSound('chime');
+                    
+                    // Gắn vào vị trí
+                    zone.appendChild(draggedElement);
+                    draggedElement.setAttribute('draggable', 'false');
+                    draggedElement.style.cursor = 'default';
+                    zone.style.border = 'none';
+                    zone.style.backgroundColor = 'transparent';
+                    
+                    piecesPlaced++;
+                    
+                    // KIỂM TRA CHIẾN THẮNG
+                    if (piecesPlaced === TOTAL_PIECES) {
+                        stopTimer();
+                        triggerWin();
+                    }
+                }
+            });
+        });
+
+        // --- 4. HIỆU ỨNG CHIẾN THẮNG ---
+        function triggerWin() {
+            playSound('win');
+            
+            // Bắn pháo giấy
+            var duration = 3 * 1000;
+            var end = Date.now() + duration;
+            (function frame() {
+                confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#fbbf24', '#ef4444', '#3b82f6'] });
+                confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#10b981', '#a855f7', '#f472b6'] });
+                if (Date.now() < end) requestAnimationFrame(frame);
+            }());
+
+            // Tàu vũ trụ bay lên
+            const board = document.getElementById('game-board');
+            board.classList.add('fly-away');
+
+            // Hiển thị Popup chúc mừng
+            setTimeout(() => {
+                document.getElementById('final-time').textContent = document.getElementById('time-val').textContent;
+                const winMsg = document.getElementById('win-message');
+                const winModal = document.getElementById('win-modal');
+                winMsg.classList.remove('hidden');
+                setTimeout(() => winModal.classList.replace('scale-0', 'scale-100'), 50);
+            }, 1000);
+        }
+
+        // --- 5. RESET GAME ---
+        function closeWinModalAndRestart() {
+            document.getElementById('win-modal').classList.replace('scale-100', 'scale-0');
+            setTimeout(() => {
+                document.getElementById('win-message').classList.add('hidden');
+                resetGame();
+            }, 300);
+        }
+
+        function resetGame() {
+            clearInterval(timerInterval);
+            isGameStarted = false;
+            piecesPlaced = 0;
+            document.getElementById('time-val').textContent = '00:00';
+            document.getElementById('restart-btn').classList.add('hidden');
+
+            const board = document.getElementById('game-board');
+            board.classList.remove('fly-away'); // Gỡ hiệu ứng bay
+
+            const wrapper = document.getElementById('pieces-wrapper');
+            const draggablesList = [
+                document.getElementById('p-nose'),
+                document.getElementById('p-body'),
+                document.getElementById('p-wl'),
+                document.getElementById('p-wr'),
+                document.getElementById('p-e1'),
+                document.getElementById('p-e2')
+            ];
+
+            // Trả mảnh ghép về kho
+            draggablesList.forEach(piece => {
+                wrapper.appendChild(piece);
+                piece.setAttribute('draggable', 'true');
+                piece.style.cursor = 'grab';
+            });
+
+            // Reset viền khung
+            dropZones.forEach(zone => {
+                zone.style.border = ''; 
+                zone.style.backgroundColor = '';
+            });
+        }
+    </script>
+</body>
+</html>
